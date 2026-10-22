@@ -9,6 +9,6 @@ test("flags a JavaScript-heavy shell and lowers evidence coverage", () => {
  assert.equal(result.limitedEvidence, true); assert.ok(result.findings.some(f => f.id === "js-shell")); assert.ok(result.coverage < 100);
 });
 test("missing structured data alone is informational", () => {
- const result = analyzeHtml('<html lang="en"><head><title>A clear descriptive page title</title><meta name="viewport" content="width=device-width"></head><body><h1>Hello</h1><p>' + "Useful content ".repeat(30) + '</p></body></html>');
+ const result = analyzeHtml('<html lang="en"><head><title>A clear descriptive page title</title><meta name="viewport" content="width=device-width"><meta name="description" content="A useful description for this example page."></head><body><h1>Hello</h1><p>' + "Useful content ".repeat(30) + '</p></body></html>');
  assert.ok(result.findings.some(f => f.id === "structured-data" && f.severity === "info")); assert.equal(result.score, 100);
 });
