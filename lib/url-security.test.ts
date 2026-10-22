@@ -1,0 +1,35 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { isBlockedHostname, isPrivateIPv4, isPrivateIPv6, parsePublicHttpUrl } from "./url-security";
+
+test("blocks common private, loopback, link-local and reserved IPv4 ranges", () => {
+  for (const ip of ["0.0.0.0", "10.1.2.3", "127.0.0.1", "169.254.1.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "198.18.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "255.255.255.255"]) {
+    assert.equal(isPrivateIPv4(ip), true, ip);
+  }
+});
+
+test("allows representative public IPv4 addresses", () => {
+  for (const ip of ["1.1.1.1", "8.8.8.8", "93.184.216.34"]) assert.equal(isPrivateIPv4(ip), false, ip);
+});
+
+test("blocks local, link-local, multicast and documentation IPv6 addresses", () => {
+  for (const ip of ["::", "::1", "fc00::1", "fd12::1", "fe80::1", "ff02::1", "2001:db8::1", "::ffff:127.0.0.1"]) {
+    assert.equal(isPrivateIPv6(ip), true, ip);
+  }
+});
+
+test("blocks localhost and internal-only hostname suffixes", () => {
+  for (const host of ["localhost", "printer.local", "service.internal", "app.localhost", "LOCALHOST."]) {
+    assert.equal(isBlockedHostname(host), true, host);
+  }
+  assert.equal(isBlockedHostname("example.com"), false);
+});
+
+test("accepts only HTTP(S) URLs without embedded credentials", () => {
+  assert.equal(parsePublicHttpUrl("https://example.com/path").hostname, "example.com");
+  assert.throws(() => parsePublicHttpUrl("file:///etc/passwd"), /Only HTTP and HTTPS/);
+  assert.throws(() => parsePublicHttpUrl("ftp://example.com"), /Only HTTP and HTTPS/);
+  assert.throws(() => parsePublicHttpUrl("https://user:pass@example.com"), /usernames or passwords/);
+  assert.throws(() => parsePublicHttpUrl("http://localhost"), /publicly accessible/);
+  assert.throws(() => parsePublicHttpUrl("http://printer.local"), /publicly accessible/);
+});
