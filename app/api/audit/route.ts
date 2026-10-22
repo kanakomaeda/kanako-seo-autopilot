@@ -1,31 +1,14 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
+import { isBlockedHostname, isPrivateIPv4, isPrivateIPv6, parsePublicHttpUrl } from "@/lib/url-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
-function isPrivateIPv4(ip: string): boolean {
-  const p = ip.split(".").map(Number);
-  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
-  const [a, b, c] = p;
-  return a === 0 || a === 10 || a === 127 || a >= 224 ||
-    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) ||
-    (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && c === 0) ||
-    (a === 192 && b === 0 && c === 2) || (a === 198 && b === 51 && c === 100) ||
-    (a === 203 && b === 0 && c === 113);
-}
-function isPrivateIPv6(ip: string): boolean {
-  const s = ip.toLowerCase().split("%")[0];
-  if (s.startsWith("::ffff:")) return isPrivateIPv4(s.slice(7));
-  return s === "::" || s === "::1" || s.startsWith("fc") || s.startsWith("fd") ||
-    /^fe[89ab]/.test(s) || s.startsWith("ff") || s.startsWith("2001:db8");
-}
 async function resolvePublicAddress(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
   const normalized = hostname.replace(/^\[|\]$/g, "");
   const ipVersion = isIP(normalized);
@@ -37,8 +20,7 @@ async function resolvePublicAddress(hostname: string): Promise<{ address: string
     if (isPrivateIPv6(normalized)) throw new Error("Private or reserved IP addresses are not allowed.");
     return { address: normalized, family: 6 };
   }
-  if (!normalized || normalized === "localhost" || normalized.endsWith(".localhost") ||
-      normalized.endsWith(".local") || normalized.endsWith(".internal")) {
+  if (isBlockedHostname(normalized)) {
     throw new Error("Only publicly accessible websites are supported.");
   }
   let addresses;
@@ -52,11 +34,7 @@ async function resolvePublicAddress(hostname: string): Promise<{ address: string
   return { address: chosen.address, family: chosen.family };
 }
 async function validatePublicUrl(raw: string): Promise<{ url: URL; address: { address: string; family: 4 | 6 } }> {
-  let url: URL;
-  try { url = new URL(raw); } catch { throw new Error("Enter a valid full URL, such as https://example.com."); }
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only HTTP and HTTPS URLs are supported.");
-  if (url.username || url.password) throw new Error("URLs containing usernames or passwords are not allowed.");
-  if (!url.hostname) throw new Error("Enter a valid public website hostname.");
+  const url = parsePublicHttpUrl(raw);
   const address = await resolvePublicAddress(url.hostname);
   url.hash = "";
   return { url, address };
