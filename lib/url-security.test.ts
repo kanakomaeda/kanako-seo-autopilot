@@ -12,9 +12,20 @@ test("allows representative public IPv4 addresses", () => {
   for (const ip of ["1.1.1.1", "8.8.8.8", "93.184.216.34"]) assert.equal(isPrivateIPv4(ip), false, ip);
 });
 
-test("blocks local, link-local, multicast and documentation IPv6 addresses", () => {
-  for (const ip of ["::", "::1", "fc00::1", "fd12::1", "fe80::1", "ff02::1", "2001:db8::1", "::ffff:127.0.0.1"]) {
+test("blocks local, link-local, multicast, documentation and special-use IPv6 addresses", () => {
+  for (const ip of [
+    "::", "::1", "fc00::1", "fd12::1", "fe80::1", "ff02::1",
+    "2001:db8::1", "::ffff:127.0.0.1",
+    "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+    "2001:10::1", "2001:20::1", "2002:7f00:1::",
+  ]) {
     assert.equal(isPrivateIPv6(ip), true, ip);
+  }
+});
+
+test("allows representative public IPv6 addresses", () => {
+  for (const ip of ["2606:4700:4700::1111", "2001:4860:4860::8888"]) {
+    assert.equal(isPrivateIPv6(ip), false, ip);
   }
 });
 
