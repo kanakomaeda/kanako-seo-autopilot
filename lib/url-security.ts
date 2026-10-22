@@ -13,7 +13,10 @@ export function isPrivateIPv4(ip: string): boolean {
     (a === 203 && b === 0 && c === 113);
 }
 
-/** Conservative IPv6 filtering for local, link-local, multicast and documentation ranges. */
+/**
+ * Conservative IPv6 filtering for local, link-local, multicast, documentation,
+ * transition, and other special-use ranges that should not be fetched by this service.
+ */
 export function isPrivateIPv6(ip: string): boolean {
   const s = ip.toLowerCase().split("%")[0];
   if (s.startsWith("::ffff:")) {
@@ -22,12 +25,18 @@ export function isPrivateIPv6(ip: string): boolean {
     // Hexadecimal IPv4-mapped forms are intentionally rejected rather than guessed.
     return true;
   }
-  return s === "::" || s === "::1" || s.startsWith("fc") || s.startsWith("fd") ||
-    /^fe[89ab]/.test(s) || s.startsWith("ff") || s.startsWith("2001:db8");
+  return s === "::" || s === "::1" ||
+    s.startsWith("fc") || s.startsWith("fd") ||
+    /^fe[89ab]/.test(s) || s.startsWith("ff") ||
+    s.startsWith("2001:db8") || // documentation
+    s.startsWith("2001:0:") || // Teredo transition
+    s.startsWith("2001:10:") || // deprecated ORCHID
+    s.startsWith("2001:20:") || // ORCHIDv2
+    s.startsWith("2002:"); // 6to4 transition may encode IPv4 destinations
 }
 
 export function isBlockedHostname(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
+  const normalized = hostname.replace(/^\\[|\\]$/g, "").toLowerCase().replace(/\\.$/, "");
   return !normalized || normalized === "localhost" || normalized.endsWith(".localhost") ||
     normalized.endsWith(".local") || normalized.endsWith(".internal");
 }
