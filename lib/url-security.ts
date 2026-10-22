@@ -36,7 +36,7 @@ export function isPrivateIPv6(ip: string): boolean {
 }
 
 export function isBlockedHostname(hostname: string): boolean {
-  const normalized = hostname.replace(/^\\[|\\]$/g, "").toLowerCase().replace(/\\.$/, "");
+  const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
   return !normalized || normalized === "localhost" || normalized.endsWith(".localhost") ||
     normalized.endsWith(".local") || normalized.endsWith(".internal");
 }
