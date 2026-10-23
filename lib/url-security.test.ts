@@ -12,6 +12,12 @@ test("allows representative public IPv4 addresses", () => {
   for (const ip of ["1.1.1.1", "8.8.8.8", "93.184.216.34"]) assert.equal(isPrivateIPv4(ip), false, ip);
 });
 
+test("fails closed for malformed IPv4 literals", () => {
+  for (const ip of ["", "1..2.3", ".1.2.3", "1.2.3.", "1.2.3.999", "01.2.3.4", "1.2.3", "1.2.3.4.5"]) {
+    assert.equal(isPrivateIPv4(ip), true, ip);
+  }
+});
+
 test("blocks compressed and expanded IPv6 special-use addresses", () => {
   for (const ip of [
     "::", "::1", "fc00::1", "fd12::1", "fe80::1", "ff02::1",
