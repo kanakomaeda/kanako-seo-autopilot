@@ -5,8 +5,7 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
-import { checkAuditRateLimit } from "@/lib/rate-limit";
-import { rateLimitUnavailableResponse } from "@/lib/rate-limit-response";
+import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -134,26 +133,8 @@ export async function POST(request: Request) {
       (forwarded ? forwarded.split(",").at(-1)?.trim() : undefined) ||
       "unknown";
 
-    let rateLimit;
-    try {
-      rateLimit = await checkAuditRateLimit(clientIp);
-    } catch {
-      return rateLimitUnavailableResponse();
-    }
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: "Too many audit requests. Please wait before trying again." },
-        {
-          status: 429,
-          headers: {
-            "Cache-Control": "no-store",
-            "Retry-After": String(rateLimit.retryAfterSeconds),
-            "X-RateLimit-Limit": "10",
-            "X-RateLimit-Remaining": "0",
-          },
-        },
-      );
-    }
+    const rateLimitGate = await enforceAuditRateLimit(clientIp);
+    if (rateLimitGate.response) return rateLimitGate.response;
 
     const { url, address } = await validatePublicUrl(raw);
     const { response, html } = await fetchPinnedHtml(url, address);
