@@ -13,7 +13,7 @@ test("warnings and critical findings affect the initial HTML score", () => {
   assert.equal(scoreFindings([finding("warning"), finding("critical")]), 84);
 });
 test("JavaScript-heavy shell lowers evidence coverage and marks missing signals provisional", () => {
-  const result = analyzeHtml('<html><head><title>App</title></head><body><div id="root"></div><script src="/one.js"></script><script src="/two.js"></script></body></html>');
+  const result = analyzeHtml('<html lang="en"><head><title>A descriptive title for this test page</title><meta name="description" content="A useful description for this JavaScript-rendered test page."><meta name="viewport" content="width=device-width"></head><body><div id="root"></div><script src="/one.js"></script><script src="/two.js"></script></body></html>');
   assert.equal(result.limitedEvidence, true);
   assert.ok(result.coverage < 100);
   assert.ok(result.findings.some(f => f.id === "js-shell" && f.severity === "info"));
