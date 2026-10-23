@@ -69,7 +69,7 @@ export function isPrivateIPv6(ip: string): boolean {
     (first & 0xffc0) === 0xfe80 || // Link-local fe80::/10
     (first & 0xff00) === 0xff00 || // Multicast ff00::/8
     (first === 0x2001 && second === 0x0db8) || // Documentation 2001:db8::/32
-    (first === 0x2001 && second === 0x0000) || // Teredo 2001:0000::/32
+    (first === 0x2001 && second <= 0x01ff) || // Conservatively block IANA special-purpose 2001::/23
     (first === 0x2001 && (second & 0xfff0) === 0x0010) || // ORCHID 2001:0010::/28
     (first === 0x2001 && (second & 0xfff0) === 0x0020) || // ORCHIDv2 2001:0020::/28
     first === 0x2002; // 6to4 2002::/16
