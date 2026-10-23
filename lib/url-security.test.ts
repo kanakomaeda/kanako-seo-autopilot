@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isBlockedHostname, isPrivateIPv4, isPrivateIPv6, parsePublicHttpUrl } from "./url-security";
 
 test("blocks common private, loopback, link-local and reserved IPv4 ranges", () => {
-  for (const ip of ["0.0.0.0", "10.1.2.3", "127.0.0.1", "169.254.1.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "198.18.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "255.255.255.255"]) {
+  for (const ip of ["0.0.0.0", "10.1.2.3", "127.0.0.1", "169.254.1.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "192.88.99.1", "198.18.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "255.255.255.255"]) {
     assert.equal(isPrivateIPv4(ip), true, ip);
   }
 });
