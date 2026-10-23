@@ -2,7 +2,7 @@ name: Verify app
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'security/**']
   pull_request:
     branches: [main, 'security/**']
   workflow_dispatch:
