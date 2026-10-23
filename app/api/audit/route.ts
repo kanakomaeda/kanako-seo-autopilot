@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
 import { checkAuditRateLimit } from "@/lib/rate-limit";
+import { rateLimitUnavailableResponse } from "@/lib/rate-limit-response";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -137,10 +138,7 @@ export async function POST(request: Request) {
     try {
       rateLimit = await checkAuditRateLimit(clientIp);
     } catch {
-      return NextResponse.json(
-        { error: "The audit service is temporarily unavailable. Please try again shortly." },
-        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
-      );
+      return rateLimitUnavailableResponse();
     }
     if (!rateLimit.allowed) {
       return NextResponse.json(
