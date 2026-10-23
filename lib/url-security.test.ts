@@ -15,7 +15,7 @@ test("allows representative public IPv4 addresses", () => {
 test("blocks compressed and expanded IPv6 special-use addresses", () => {
   for (const ip of [
     "::", "::1", "fc00::1", "fd12::1", "fe80::1", "ff02::1",
-    "2001:db8::1", "::ffff:127.0.0.1",
+    "2001:db8::1", "2001:2::1", "::ffff:127.0.0.1",
     "2001:0:4136:e378:8000:63bf:3fff:fdd2",
     "2001:10::1", "2001:20::1", "2002:7f00:1::",
     "2001:0000:4136:e378:8000:63bf:3fff:fdd2",
