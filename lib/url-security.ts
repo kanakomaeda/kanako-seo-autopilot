@@ -13,26 +13,66 @@ export function isPrivateIPv4(ip: string): boolean {
     (a === 203 && b === 0 && c === 113);
 }
 
+/** Expand a validated IPv6 literal to eight 16-bit words for range checks. */
+function ipv6Words(ip: string): number[] | null {
+  const value = ip.toLowerCase().split("%")[0];
+  if (isIP(value) !== 6) return null;
+
+  // Convert an embedded dotted IPv4 tail into its equivalent two IPv6 words.
+  let normalized = value;
+  const ipv4Tail = /(?:^|:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(normalized);
+  if (ipv4Tail) {
+    const octets = ipv4Tail[1].split(".").map(Number);
+    if (octets.some(n => n < 0 || n > 255)) return null;
+    const replacement = ((octets[0] << 8) | octets[1]).toString(16) + ":" +
+      ((octets[2] << 8) | octets[3]).toString(16);
+    normalized = normalized.slice(0, ipv4Tail.index) + (normalized[ipv4Tail.index] === ":" ? ":" : "") + replacement;
+  }
+
+  const halves = normalized.split("::");
+  if (halves.length > 2) return null;
+  const parseHalf = (half: string) => half ? half.split(":").map(part => {
+    if (!/^[0-9a-f]{1,4}$/.test(part)) return NaN;
+    return Number.parseInt(part, 16);
+  }) : [];
+  const left = parseHalf(halves[0]);
+  const right = parseHalf(halves[1] ?? "");
+  if ([...left, ...right].some(n => !Number.isFinite(n))) return null;
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || (halves.length === 2 && missing < 1)) return null;
+  return [...left, ...Array(Math.max(0, missing)).fill(0), ...right];
+}
+
 /**
- * Conservative IPv6 filtering for local, link-local, multicast, documentation,
- * transition, and other special-use ranges that should not be fetched by this service.
+ * Conservatively blocks local, documentation, transition, and special-use IPv6 ranges.
+ * Checks expanded and compressed forms so alternate textual spellings cannot bypass filtering.
  */
 export function isPrivateIPv6(ip: string): boolean {
-  const s = ip.toLowerCase().split("%")[0];
-  if (s.startsWith("::ffff:")) {
-    const mapped = s.slice(7);
-    if (isIP(mapped) === 4) return isPrivateIPv4(mapped);
-    // Hexadecimal IPv4-mapped forms are intentionally rejected rather than guessed.
-    return true;
+  const words = ipv6Words(ip);
+  if (!words) return true;
+
+  const allZeroPrefix = words.slice(0, 5).every(word => word === 0);
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d), including hexadecimal and expanded forms.
+  if (allZeroPrefix && words[5] === 0xffff) {
+    const a = words[6] >> 8;
+    const b = words[6] & 0xff;
+    const c = words[7] >> 8;
+    const d = words[7] & 0xff;
+    return isPrivateIPv4(`${a}.${b}.${c}.${d}`);
   }
-  return s === "::" || s === "::1" ||
-    s.startsWith("fc") || s.startsWith("fd") ||
-    /^fe[89ab]/.test(s) || s.startsWith("ff") ||
-    s.startsWith("2001:db8") || // documentation
-    s.startsWith("2001:0:") || // Teredo transition
-    s.startsWith("2001:10:") || // deprecated ORCHID
-    s.startsWith("2001:20:") || // ORCHIDv2
-    s.startsWith("2002:"); // 6to4 transition may encode IPv4 destinations
+
+  const first = words[0];
+  const second = words[1];
+  return words.every(word => word === 0) ||
+    (words.slice(0, 7).every(word => word === 0) && words[7] === 1) ||
+    (first & 0xfe00) === 0xfc00 || // Unique-local fc00::/7
+    (first & 0xffc0) === 0xfe80 || // Link-local fe80::/10
+    (first & 0xff00) === 0xff00 || // Multicast ff00::/8
+    (first === 0x2001 && second === 0x0db8) || // Documentation 2001:db8::/32
+    (first === 0x2001 && second === 0x0000) || // Teredo 2001:0000::/32
+    (first === 0x2001 && (second & 0xfff0) === 0x0010) || // ORCHID 2001:0010::/28
+    (first === 0x2001 && (second & 0xfff0) === 0x0020) || // ORCHIDv2 2001:0020::/28
+    first === 0x2002; // 6to4 2002::/16
 }
 
 export function isBlockedHostname(hostname: string): boolean {
