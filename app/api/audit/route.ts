@@ -5,6 +5,7 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
+import { checkAuditRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -127,6 +128,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
+    const forwarded = request.headers.get("x-forwarded-for");
+    const clientIp = request.headers.get("x-real-ip")?.trim() ||
+      (forwarded ? forwarded.split(",").at(-1)?.trim() : undefined) ||
+      "unknown";
+
+    let rateLimit;
+    try {
+      rateLimit = await checkAuditRateLimit(clientIp);
+    } catch {
+      return NextResponse.json(
+        { error: "The audit service is temporarily unavailable. Please try again shortly." },
+        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+      );
+    }
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many audit requests. Please wait before trying again." },
+        {
+          status: 429,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+            "X-RateLimit-Limit": "10",
+            "X-RateLimit-Remaining": "0",
+          },
+        },
+      );
+    }
+
     const { url, address } = await validatePublicUrl(raw);
     const { response, html } = await fetchPinnedHtml(url, address);
     const result = analyzeHtml(html);
