@@ -65,8 +65,14 @@ export function isPrivateIPv6(ip: string): boolean {
 
   const first = words[0];
   const second = words[1];
+  const third = words[2];
+  const fourth = words[3];
   return words.every(word => word === 0) ||
     (words.slice(0, 7).every(word => word === 0) && words[7] === 1) ||
+    (first === 0x0064 && second === 0xff9b && third === 0 && fourth === 0) || // Well-known NAT64 64:ff9b::/96
+    (first === 0x0064 && second === 0xff9b && third === 0x0001) || // Local-use NAT64 64:ff9b:1::/48
+    (first === 0x0100 && second === 0 && third === 0 && fourth === 0) || // Discard-only 100::/64
+    (first & 0xff00) === 0x0000 || // Reserved/IPv4-compatible 0000::/8 (mapped IPv4 handled above)
     (first & 0xfe00) === 0xfc00 || // Unique-local fc00::/7
     (first & 0xffc0) === 0xfe80 || // Link-local fe80::/10
     (first & 0xff00) === 0xff00 || // Multicast ff00::/8
@@ -74,6 +80,8 @@ export function isPrivateIPv6(ip: string): boolean {
     (first === 0x2001 && second <= 0x01ff) || // Conservatively block IANA special-purpose 2001::/23
     (first === 0x2001 && (second & 0xfff0) === 0x0010) || // ORCHID 2001:0010::/28
     (first === 0x2001 && (second & 0xfff0) === 0x0020) || // ORCHIDv2 2001:0020::/28
+    (first === 0x3fff && (second & 0xfff0) === 0x0000) || // Documentation 3fff::/20
+    first === 0x5f00 || // Segment-routing SIDs 5f00::/16 are not globally reachable
     first === 0x2002; // 6to4 2002::/16
 }
 
