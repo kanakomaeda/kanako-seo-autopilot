@@ -2,6 +2,8 @@ import { isIP } from "node:net";
 
 /** Returns true for IPv4 ranges that must not be fetched by the public audit service. */
 export function isPrivateIPv4(ip: string): boolean {
+  // Require exactly four decimal octets; Number("") would otherwise treat empty octets as zero.
+  if (!/^(?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}$/.test(ip)) return true;
   const p = ip.split(".").map(Number);
   if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
   const [a, b, c] = p;
