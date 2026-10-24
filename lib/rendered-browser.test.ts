@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { renderPublicPage } from "./rendered-browser";
 
-test("renders JavaScript-generated DOM while keeping requests on the target origin", async () => {
+test("waits for delayed JavaScript content while keeping requests on the target origin", async () => {
   const server = createServer((request, response) => {
     if (request.url === "/private-probe") {
       response.writeHead(200, { "Content-Type": "text/plain" });
@@ -14,9 +14,11 @@ test("renders JavaScript-generated DOM while keeping requests on the target orig
     response.end(`<!doctype html><html lang="en"><head><title>Initial title</title></head><body>
       <div id="app">Starting</div>
       <script>
-        document.querySelector("#app").innerHTML =
-          '<h1>Rendered heading</h1><p>' + 'Rendered words '.repeat(40) + '</p>' +
-          '<img src="/photo.jpg" alt="Rendered photo">';
+        setTimeout(() => {
+          document.querySelector("#app").innerHTML =
+            '<h1>Rendered heading</h1><p>' + 'Rendered words '.repeat(40) + '</p>' +
+            '<img src="/photo.jpg" alt="Rendered photo">';
+        }, 1800);
         const probe = document.createElement("script");
         probe.src = "http://127.0.0.1:" + location.port + "/private-probe";
         document.body.appendChild(probe);
