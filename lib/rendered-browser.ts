@@ -166,7 +166,8 @@ export async function renderPublicPage(
     const final = new URL(page.url());
     if (final.origin !== target.origin) return null;
     return { html, finalUrl: final.toString() };
-  } catch {
+  } catch (error) {
+    if (process.env.CI === "true") console.error("Rendered browser test diagnostic:", error instanceof Error ? error.message : String(error));
     return null;
   } finally {
     await browser?.close().catch(() => undefined);
