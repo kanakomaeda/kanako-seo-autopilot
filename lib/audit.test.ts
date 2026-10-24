@@ -34,3 +34,10 @@ test("detects noindex and missing image alt without claiming rendered-page cover
   assert.ok(result.findings.some(f => f.id === "noindex" && f.severity === "critical"));
   assert.ok(result.findings.some(f => f.id === "image-alt" && f.severity === "warning"));
 });
+
+test("rendered-page audits label findings as rendered evidence", () => {
+  const result = analyzeHtml("<html><head></head><body></body></html>", true);
+  assert.equal(result.scoreLabel, "Rendered page checks score");
+  assert.ok(result.findings.some((f) => f.id === "title-missing" && f.detail.includes("rendered page")));
+  assert.ok(result.findings.some((f) => f.id === "content-sparse" && f.title.includes("rendered page")));
+});
