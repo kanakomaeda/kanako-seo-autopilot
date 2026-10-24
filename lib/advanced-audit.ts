@@ -2,14 +2,14 @@ import type { Finding } from "./audit";
 
 function readAttributes(tag: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const pattern = /([\\w:-]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\\x60]+))/g;
+  const pattern = /([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>\x60]+))/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(tag))) result[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
   return result;
 }
 
 function metaValue(html: string, key: string, attribute: "name" | "property" = "property"): string {
-  const tags = html.match(/<meta\\b[^>]*>/gi) ?? [];
+  const tags = html.match(/<meta\b[^>]*>/gi) ?? [];
   for (const tag of tags) {
     const attrs = readAttributes(tag);
     if ((attrs[attribute] ?? "").toLowerCase() === key.toLowerCase()) return (attrs.content ?? "").trim();
@@ -44,7 +44,7 @@ export function analyzeAdvancedHtml(html: string, pageUrl: string): Finding[] {
 
   let hostname = "";
   try { hostname = new URL(pageUrl).hostname.toLowerCase(); } catch { /* caller validates the URL */ }
-  const anchors = (html.match(/<a\\b[^>]*>/gi) ?? []).map(readAttributes);
+  const anchors = (html.match(/<a\b[^>]*>/gi) ?? []).map(readAttributes);
   let internal = 0;
   let external = 0;
   let relative = 0;
@@ -53,7 +53,7 @@ export function analyzeAdvancedHtml(html: string, pageUrl: string): Finding[] {
   for (const anchor of anchors) {
     const href = (anchor.href ?? "").trim();
     if (!href) continue;
-    const rel = (anchor.rel ?? "").toLowerCase().split(/\\s+/);
+    const rel = (anchor.rel ?? "").toLowerCase().split(/\s+/);
     if (rel.includes("nofollow") || rel.includes("sponsored") || rel.includes("ugc")) nofollow++;
     if ((anchor.target ?? "").toLowerCase() === "_blank" && !rel.includes("noopener") && !rel.includes("noreferrer")) unsafeBlank++;
     if (/^(?:mailto:|tel:|javascript:|data:)/i.test(href)) continue;
@@ -79,8 +79,8 @@ export function analyzeAdvancedHtml(html: string, pageUrl: string): Finding[] {
       "Consider rel=\"noopener\" for links opening a new tab, particularly when linking to untrusted destinations.");
   }
 
-  const hreflangLinks = (html.match(/<link\\b[^>]*>/gi) ?? []).map(readAttributes)
-    .filter(attrs => (attrs.rel ?? "").toLowerCase().split(/\\s+/).includes("alternate") && Boolean(attrs.hreflang));
+  const hreflangLinks = (html.match(/<link\b[^>]*>/gi) ?? []).map(readAttributes)
+    .filter(attrs => (attrs.rel ?? "").toLowerCase().split(/\s+/).includes("alternate") && Boolean(attrs.hreflang));
   if (hreflangLinks.length) {
     const invalid = hreflangLinks.filter(attrs => {
       try { return !/^https?:$/.test(new URL(attrs.href ?? "").protocol); } catch { return true; }
@@ -90,8 +90,8 @@ export function analyzeAdvancedHtml(html: string, pageUrl: string): Finding[] {
       "Verify language/region codes, reciprocal annotations, and canonical URLs for each language version.");
   }
 
-  const canonicalTag = (html.match(/<link\\b[^>]*>/gi) ?? []).map(readAttributes)
-    .find(attrs => (attrs.rel ?? "").toLowerCase().split(/\\s+/).includes("canonical"));
+  const canonicalTag = (html.match(/<link\b[^>]*>/gi) ?? []).map(readAttributes)
+    .find(attrs => (attrs.rel ?? "").toLowerCase().split(/\s+/).includes("canonical"));
   if (canonicalTag?.href && hostname) {
     try {
       const canonicalHost = new URL(canonicalTag.href, pageUrl).hostname.toLowerCase();
