@@ -4,7 +4,8 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
-import { analyzeHtml } from "@/lib/audit";
+import { analyzeHtml, scoreFindings } from "@/lib/audit";
+import { analyzeAdvancedHtml } from "@/lib/advanced-audit";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
@@ -52,7 +53,7 @@ function fetchPinnedHtml(url: URL, address: { address: string; family: 4 | 6 }):
     const req = requestFn(url, {
       method: "GET",
       headers: {
-        "User-Agent": "KanakoSEOAutoPilot/1.1 (+initial-html-audit)",
+        "User-Agent": "KanakoSEOAutoPilot/1.2 (+initial-html-audit)",
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
         "Connection": "close",
       },
@@ -128,9 +129,14 @@ export async function POST(request: Request) {
 
     const { url, address } = await validatePublicUrl(raw);
     const { response, html } = await fetchPinnedHtml(url, address);
-    const result = analyzeHtml(html);
+    const baseResult = analyzeHtml(html);
+    const advancedFindings = analyzeAdvancedHtml(html, url.toString());
+    const findings = [...baseResult.findings, ...advancedFindings];
+    const score = baseResult.score === null
+      ? null
+      : scoreFindings(findings.filter(f => f.severity !== "info"));
     return NextResponse.json({
-      ...result, url: raw, finalUrl: url.toString(), status: response.statusCode ?? 200,
+      ...baseResult, findings, score, url: raw, finalUrl: url.toString(), status: response.statusCode ?? 200,
       fetchedAt: new Date().toISOString(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
