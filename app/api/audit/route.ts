@@ -5,6 +5,7 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
+import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -127,6 +128,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
+    // Vercel supplies x-real-ip at the trusted edge. Do not derive the
+    // rate-limit identity from x-forwarded-for, which can be client-spoofed.
+    const clientIp = request.headers.get("x-real-ip")?.trim();
+    if (!clientIp) {
+      // Do not put unrelated visitors into a shared "unknown" rate-limit bucket.
+      return NextResponse.json(
+        { error: "The audit service is temporarily unavailable. Please try again shortly." },
+        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+      );
+    }
+
+    const rateLimitGate = await enforceAuditRateLimit(clientIp);
+    if (rateLimitGate.response) return rateLimitGate.response;
+
     const { url, address } = await validatePublicUrl(raw);
     const { response, html } = await fetchPinnedHtml(url, address);
     const result = analyzeHtml(html);
