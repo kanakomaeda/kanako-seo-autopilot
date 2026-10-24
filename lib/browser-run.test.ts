@@ -66,7 +66,11 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
   try {
     const html = await fetchBrowserRunHtml("https://trusted.example/page");
     assert.match(requestedUrl, /browser-run\/content\?cacheTTL=0$/);
-    assert.match(requestBody, /"allowRequestPattern"/);
+    const parsedBody = JSON.parse(requestBody) as { allowRequestPattern?: string[] };
+    assert.deepEqual(parsedBody.allowRequestPattern, ["/^https?:\\/\\/trusted\\.example(?::\\d+)?(?:\\/|$)/i"]);
+    const pattern = new RegExp(parsedBody.allowRequestPattern?.[0].replace(/^\\/(.*)\\/i$/, "$1") ?? "a^", "i");
+    assert.equal(pattern.test("https://trusted.example/page"), true);
+    assert.equal(pattern.test("https://trusted.example.evil.test/page"), false);
     assert.match(html ?? "", /Rendered title/);
   } finally {
     globalThis.fetch = originalFetch;
