@@ -172,16 +172,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
-    const token = bearerToken(request);
-    if (!token) return NextResponse.json({ error: "Mag-sign up o mag-login muna para magamit ang SEO audit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
-    const user = await getAuthenticatedUser(token);
-    if (!user) return NextResponse.json({ error: "Nag-expire ang session. Mag-login ulit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
-    // Validate the submitted URL before consuming an audit attempt. A malformed
-    // URL, unavailable subscription service, or a failed fetch must not burn the
-    // user's weekly free allowance.
-    const { url, address } = await validatePublicUrl(raw);
-    // Apply infrastructure abuse controls before fetching the target website.
-    // The subscription attempt is claimed only after the audit completes successfully.
+    // Fail closed on missing trusted infrastructure metadata before doing auth,
+    // DNS, or target-site work. Do not trust client-controlled x-forwarded-for.
     const clientIp = request.headers.get("x-real-ip")?.trim();
     if (!clientIp) {
       return NextResponse.json(
@@ -191,6 +183,15 @@ export async function POST(request: Request) {
     }
     const rateLimitGate = await enforceAuditRateLimit(clientIp);
     if (rateLimitGate.response) return rateLimitGate.response;
+
+    const token = bearerToken(request);
+    if (!token) return NextResponse.json({ error: "Mag-sign up o mag-login muna para magamit ang SEO audit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+    const user = await getAuthenticatedUser(token);
+    if (!user) return NextResponse.json({ error: "Nag-expire ang session. Mag-login ulit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+    // Validate the submitted URL before consuming an audit attempt. A malformed
+    // URL, unavailable subscription service, or a failed fetch must not burn the
+    // user's weekly free allowance.
+    const { url, address } = await validatePublicUrl(raw);
 
     const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
     const [rendered, discoveryFindings] = await Promise.all([
