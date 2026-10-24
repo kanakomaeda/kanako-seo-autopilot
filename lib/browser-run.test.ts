@@ -53,7 +53,7 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
   process.env.CLOUDFLARE_BROWSER_RUN_ENABLED = "true";
   process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
   process.env.CLOUDFLARE_API_TOKEN = "test-token";
-  process.env.CLOUDFLARE_BROWSER_RUN_ALLOWED_HOSTS = "trusted.example";
+  process.env.CLOUDFLARE_BROWSER_RUN_ALLOWED_HOSTS = "trusted.example,other.trusted.example";
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requestedUrl = String(input);
     requestBody = String(init?.body ?? "");
@@ -74,6 +74,7 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
     const pattern = new RegExp(patternLiteral.slice(1, -1));
     assert.equal(pattern.test("https://trusted.example/page"), true);
     assert.equal(pattern.test("https://trusted.example.evil.test/page"), false);
+    assert.equal(pattern.test("https://other.trusted.example/page"), false);
     assert.match(html ?? "", /Rendered title/);
   } finally {
     globalThis.fetch = originalFetch;
