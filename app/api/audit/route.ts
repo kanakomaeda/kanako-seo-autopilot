@@ -9,9 +9,10 @@ import { analyzeAdvancedHtml } from "@/lib/advanced-audit";
 import { analyzeDiscovery } from "@/lib/discovery-audit";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
+import { renderPublicPage } from "@/lib/rendered-browser";
 
 export const runtime = "nodejs";
-export const maxDuration = 15;
+export const maxDuration = 30;
 
 async function resolvePublicAddress(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
   const normalized = hostname.replace(/^\[|\]$/g, "");
@@ -185,16 +186,25 @@ export async function POST(request: Request) {
     if (rateLimitGate.response) return rateLimitGate.response;
 
     const { url, address } = await validatePublicUrl(raw);
-    const { response, html } = await fetchPinnedHtml(url, address);
-    const baseResult = analyzeHtml(html);
-    const advancedFindings = analyzeAdvancedHtml(html, url.toString());
-    const discoveryFindings = await inspectRobotsAndSitemap(url, address);
+    const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
+    const [rendered, discoveryFindings] = await Promise.all([
+      renderPublicPage(url, address),
+      inspectRobotsAndSitemap(url, address),
+    ]);
+    // Prefer the browser DOM when it rendered successfully. If it did not, retain
+    // the initial-HTML result and its existing limited-evidence score safeguards.
+    const auditHtml = rendered?.html ?? initialHtml;
+    const auditUrl = rendered?.finalUrl ?? url.toString();
+    const baseResult = analyzeHtml(auditHtml);
+    const advancedFindings = analyzeAdvancedHtml(auditHtml, auditUrl);
     const findings = [...baseResult.findings, ...advancedFindings, ...discoveryFindings];
     const score = baseResult.score === null
       ? null
       : scoreFindings(findings.filter(f => f.severity !== "info"));
     return NextResponse.json({
-      ...baseResult, findings, score, url: raw, finalUrl: url.toString(), status: response.statusCode ?? 200,
+      ...baseResult, findings, score, url: raw, finalUrl: auditUrl, status: response.statusCode ?? 200,
+      evidenceMode: rendered ? "rendered" : "initial-html",
+      renderedPage: Boolean(rendered),
       fetchedAt: new Date().toISOString(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
