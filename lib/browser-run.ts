@@ -48,7 +48,7 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
   const allowedPatterns = [...allowedHosts].map(
     (host) => `/^https?:\\/\\/${escapeRegex(host)}(?::\\d+)?(?:\\/|$)/i`,
   );
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/browser-run/content`;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/browser-run/content?cacheTTL=0`;
 
   let response: Response;
   try {
@@ -64,7 +64,6 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
         gotoOptions: { waitUntil: "networkidle2", timeout: 5_000 },
         rejectResourceTypes: ["image", "media", "font"],
         allowRequestPattern: allowedPatterns,
-        cacheTTL: 0,
       }),
       signal: AbortSignal.timeout(BROWSER_RUN_TIMEOUT_MS),
       cache: "no-store",
