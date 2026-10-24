@@ -192,7 +192,6 @@ export async function POST(request: Request) {
     const rateLimitGate = await enforceAuditRateLimit(clientIp);
     if (rateLimitGate.response) return rateLimitGate.response;
 
-    {
     const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
     const [rendered, discoveryFindings] = await Promise.all([
       renderPublicPage(url, address, initialHtml),
