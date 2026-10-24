@@ -1,25 +1,99 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import chromium from "@sparticuz/chromium";
 import { chromium as playwrightChromium } from "playwright-core";
+import { isPrivateIPv4, isPrivateIPv6 } from "./ip-validation";
 
 type PublicAddress = { address: string; family: 4 | 6 };
 const MAX_RENDERED_HTML = 1_000_000;
 const MAX_REQUESTS = 60;
+const MAX_EXTERNAL_RESOURCE_ORIGINS = 10;
+
+function resolverAddress(address: PublicAddress): string {
+  return address.family === 6 ? `[${address.address}]` : address.address;
+}
+
+function getResourceUrls(html: string, baseUrl: URL): URL[] {
+  const urls: URL[] = [];
+  const tagPattern = /<(script|link|img|source|video|audio)\\b[^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tagPattern.exec(html))) {
+    const tag = match[0];
+    const tagName = match[1].toLowerCase();
+    const rel = tag.match(/\\brel\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))/i);
+    const isResourceLink = tagName !== "link" ||
+      /(?:^|\\s)(?:stylesheet|preload|modulepreload)(?:\\s|$)/i.test(rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? "");
+    if (!isResourceLink) continue;
+    const attrName = tagName === "link" ? "href" : "src";
+    const attr = new RegExp(`\\\\b${attrName}\\\\s*=\\\\s*(?:"([^"]*)"|'([^']*)'|([^\\\\s"'=<>]+))`, "i").exec(tag);
+    const raw = (attr?.[1] ?? attr?.[2] ?? attr?.[3] ?? "").replace(/&amp;/gi, "&").trim();
+    if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) continue;
+    try {
+      const url = new URL(raw, baseUrl);
+      if (!["http:", "https:"].includes(url.protocol)) continue;
+      if (baseUrl.protocol === "https:" && url.protocol !== "https:") continue;
+      if (url.username || url.password || url.port && !["80", "443"].includes(url.port)) continue;
+      if (url.origin !== baseUrl.origin) urls.push(url);
+    } catch {
+      // Ignore malformed resource references; they are not allowed by the browser route.
+    }
+  }
+  return urls;
+}
+
+async function resolveResourceHost(hostname: string): Promise<PublicAddress | null> {
+  const normalized = hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  if (!normalized || isIP(normalized) !== 0 ||
+      normalized === "localhost" || normalized.endsWith(".localhost") ||
+      normalized.endsWith(".local") || normalized.endsWith(".internal")) return null;
+  try {
+    const addresses = await lookup(normalized, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some(a =>
+      a.family === 4 ? isPrivateIPv4(a.address) : isPrivateIPv6(a.address))) return null;
+    const chosen = addresses.find(a => a.family === 4) ?? addresses.find(a => a.family === 6);
+    if (!chosen || (chosen.family !== 4 && chosen.family !== 6)) return null;
+    return { address: chosen.address, family: chosen.family };
+  } catch {
+    return null;
+  }
+}
 
 export async function renderPublicPage(
   target: URL,
   address: PublicAddress,
+  initialHtml = "",
 ): Promise<{ html: string; finalUrl: string } | null> {
   // Chromium's host resolver mapping is deliberately limited to DNS hostnames.
   // Literal-IP targets remain supported by the initial-HTML audit only.
-  if (/^[\[\]]/.test(target.hostname) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
+  if (/^[\\[\\]]/.test(target.hostname) || /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
     return null;
   }
 
   let browser: Awaited<ReturnType<typeof playwrightChromium.launch>> | undefined;
   try {
-    const resolverRule = `MAP ${target.hostname} ${address.address},EXCLUDE localhost`;
+    // Allow only external origins explicitly referenced as static resources by
+    // the fetched HTML. Resolve and pin each host to a public IP before Chromium
+    // starts; do not grant arbitrary third-party or private-network access.
+    const resourceUrls = getResourceUrls(initialHtml, target);
+    const resourceHosts = [...new Set(resourceUrls.map(url => url.hostname.toLowerCase()))]
+      .filter(host => host !== target.hostname.toLowerCase())
+      .slice(0, MAX_EXTERNAL_RESOURCE_ORIGINS);
+    const resolvedResources = await Promise.all(resourceHosts.map(async hostname => ({
+      hostname,
+      address: await resolveResourceHost(hostname),
+    })));
+    const allowedOrigins = new Set([target.origin]);
+    const resolverRules = [`MAP ${target.hostname} ${resolverAddress(address)}`];
+    for (const resource of resolvedResources) {
+      if (!resource.address) continue;
+      resolverRules.push(`MAP ${resource.hostname} ${resolverAddress(resource.address)}`);
+      for (const url of resourceUrls) {
+        if (url.hostname.toLowerCase() === resource.hostname) allowedOrigins.add(url.origin);
+      }
+    }
+    resolverRules.push("EXCLUDE localhost");
     browser = await playwrightChromium.launch({
-      args: [...chromium.args, `--host-resolver-rules=${resolverRule}`],
+      args: [...chromium.args, `--host-resolver-rules=${resolverRules.join(",")}`],
       executablePath: await chromium.executablePath(),
       headless: true,
       timeout: 5_000,
@@ -30,7 +104,9 @@ export async function renderPublicPage(
       acceptDownloads: false,
       ignoreHTTPSErrors: false,
       viewport: { width: 1365, height: 900 },
-      userAgent: "Mozilla/5.0 (compatible; KanakoSEOAutoPilot/1.3; +rendered-page-audit)",
+      // Use a normal Chromium UA so legitimate CDN/WAF rules don't treat the
+      // render request as a custom crawler. This is still a read-only audit.
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
     });
     const page = await context.newPage();
     page.setDefaultNavigationTimeout(6_000);
@@ -45,9 +121,10 @@ export async function renderPublicPage(
       }
       try {
         const requested = new URL(requestUrl);
-        // Same-origin only: no third-party calls, data URLs, file URLs, or
-        // redirects to another host/protocol are allowed in this browser.
-        if (requested.origin !== target.origin || !["http:", "https:"].includes(requested.protocol)) {
+        // Same-origin plus pinned, public static-resource origins only. Dynamic
+        // third-party requests, redirects to unlisted origins, and non-web URLs
+        // remain blocked to preserve the SSRF boundary.
+        if (!allowedOrigins.has(requested.origin) || !["http:", "https:"].includes(requested.protocol)) {
           await route.abort("blockedbyclient");
           return;
         }
@@ -69,7 +146,7 @@ export async function renderPublicPage(
       let previousTextLength = -1;
       let stableSamples = 0;
       for (let step = 0; step < 14; step += 1) {
-        const textLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
         if (textLength >= 35 && textLength === previousTextLength) stableSamples += 1;
         else stableSamples = 0;
         previousTextLength = textLength;
