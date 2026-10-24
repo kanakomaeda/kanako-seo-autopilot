@@ -180,19 +180,24 @@ export async function POST(request: Request) {
     try { entitlement = await callSupabaseRpc("seo_claim_free_audit", token); }
     catch { return NextResponse.json({ error: "Hindi ma-verify ang subscription. Walang audit na ginawa; subukan ulit mamaya." }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
     if (!entitlement.allowed) return NextResponse.json({ error: "Naubos na ang free audit attempt mo. Mag-submit ng manual payment request para ma-activate ang subscription.", subscriptionRequired: true, nextFreeAt: entitlement.next_free_at ?? null }, { status: 402, headers: { "Cache-Control": "no-store" } });
-    // Vercel supplies x-real-ip at the trusted edge. Do not derive the
-    // rate-limit identity from x-forwarded-for, which can be client-spoofed.
-    const clientIp = request.headers.get("x-real-ip")?.trim();
-    if (!clientIp) {
-      // Do not put unrelated visitors into a shared "unknown" rate-limit bucket.
-      return NextResponse.json(
-        { error: "The audit service is temporarily unavailable. Please try again shortly." },
-        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
-      );
-    }
+    // The database RPC grants unlimited entitlement only to the confirmed,
+    // designated owner account. Keep infrastructure abuse controls for regular
+    // users, while not applying the per-IP audit quota to the verified superuser.
+    const isSuperuser = entitlement.unlimited === true && entitlement.plan === "admin";
+    if (!isSuperuser) {
+      // Vercel supplies x-real-ip at the trusted edge. Do not derive the
+      // rate-limit identity from x-forwarded-for, which can be client-spoofed.
+      const clientIp = request.headers.get("x-real-ip")?.trim();
+      if (!clientIp) {
+        return NextResponse.json(
+          { error: "The audit service is temporarily unavailable. Please try again shortly." },
+          { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+        );
+      }
 
-    const rateLimitGate = await enforceAuditRateLimit(clientIp);
-    if (rateLimitGate.response) return rateLimitGate.response;
+      const rateLimitGate = await enforceAuditRateLimit(clientIp);
+      if (rateLimitGate.response) return rateLimitGate.response;
+    }
 
     const { url, address } = await validatePublicUrl(raw);
     const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
