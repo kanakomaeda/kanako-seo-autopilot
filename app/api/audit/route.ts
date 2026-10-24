@@ -5,28 +5,12 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
+import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
-function isPrivateIPv4(ip: string): boolean {
-  const p = ip.split(".").map(Number);
-  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
-  const [a, b, c] = p;
-  return a === 0 || a === 10 || a === 127 || a >= 224 ||
-    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) ||
-    (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && c === 0) ||
-    (a === 192 && b === 0 && c === 2) || (a === 198 && b === 51 && c === 100) ||
-    (a === 203 && b === 0 && c === 113);
-}
-function isPrivateIPv6(ip: string): boolean {
-  const s = ip.toLowerCase().split("%")[0];
-  if (s.startsWith("::ffff:")) return isPrivateIPv4(s.slice(7));
-  return s === "::" || s === "::1" || s.startsWith("fc") || s.startsWith("fd") ||
-    /^fe[89ab]/.test(s) || s.startsWith("ff") || s.startsWith("2001:db8");
-}
 async function resolvePublicAddress(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
   const normalized = hostname.replace(/^\[|\]$/g, "");
   const ipVersion = isIP(normalized);
