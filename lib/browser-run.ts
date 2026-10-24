@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { isBlockedHostname, parsePublicHttpUrl } from "./url-security";
 
 const MAX_RENDERED_HTML_BYTES = 1_000_000;
-const BROWSER_RUN_TIMEOUT_MS = 6_000;
+const BROWSER_RUN_TIMEOUT_MS = 12_000;
 
 function parseAllowedHosts(raw: string | undefined): Set<string> {
   return new Set(
@@ -61,7 +61,7 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
       },
       body: JSON.stringify({
         url: url.toString(),
-        gotoOptions: { waitUntil: "networkidle2", timeout: 5_000 },
+        gotoOptions: { waitUntil: "networkidle2", timeout: 10_000 },
         rejectResourceTypes: ["image", "media", "font"],
         allowRequestPattern: allowedPatterns,
       }),
@@ -72,12 +72,23 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
     throw new Error("Browser Run could not render this page within the time limit.");
   }
 
-  if (!response.ok) {
-    // Avoid returning upstream details, which may contain request metadata.
-    throw new Error(`Browser Run could not render this page (HTTP ${response.status}).`);
-  }
-
   const responseText = await response.text();
+  if (!response.ok) {
+    // Surface a short, sanitized upstream error without exposing headers or secrets.
+    let detail = "";
+    try {
+      const payload = JSON.parse(responseText) as { errors?: Array<{ code?: unknown; message?: unknown }> };
+      const first = payload.errors?.[0];
+      const code = typeof first?.code === "number" ? ` code ${first.code}` : "";
+      const message = typeof first?.message === "string"
+        ? first.message.replace(/https?:\/\/\S+/gi, "[URL]").replace(/[\r\n\t]+/g, " ").slice(0, 180)
+        : "";
+      detail = `${code}${message ? `: ${message}` : ""}`;
+    } catch {
+      // Do not expose raw upstream response bodies.
+    }
+    throw new Error(`Browser Run could not render this page (HTTP ${response.status})${detail}.`);
+  }
   let html = responseText;
   try {
     const data = JSON.parse(responseText) as {
