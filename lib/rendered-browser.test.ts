@@ -18,10 +18,10 @@ test("renders JavaScript-generated DOM while keeping requests on the target orig
           '<h1>Rendered heading</h1><p>' + 'Rendered words '.repeat(40) + '</p>' +
           '<img src="/photo.jpg" alt="Rendered photo">';
         const probe = document.createElement("script");
-        probe.src = "http://127.0.0.1:${" + "PORT" + "}/private-probe";
+        probe.src = "http://127.0.0.1:" + location.port + "/private-probe";
         document.body.appendChild(probe);
       </script>
-    </body></html>`.replace("PORT", String((server.address() as { port: number }).port)));
+    </body></html>`);
   });
 
   await new Promise<void>((resolve, reject) => {
