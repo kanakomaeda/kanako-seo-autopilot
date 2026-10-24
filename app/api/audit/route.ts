@@ -117,7 +117,7 @@ function fetchPinnedText(url: URL, address: { address: string; family: 4 | 6 }):
         if (options?.all) callback(null, [{ address: address.address, family: address.family }]);
         else callback(null, address.address, address.family);
       }) as never,
-      servername: isIP(url.hostname.replace(/^\\[|\\]$/g, "")) ? undefined : url.hostname,
+      servername: isIP(url.hostname.replace(/^\[|\]$/g, "")) ? undefined : url.hostname,
       timeout: 1800,
     }, response => {
       const chunks: Buffer[] = [];
@@ -146,10 +146,10 @@ async function inspectRobotsAndSitemap(url: URL, address: { address: string; fam
   let robots: { status: number; text: string } | null = null;
   try { robots = await fetchPinnedText(new URL("/robots.txt", url.origin), address); } catch { /* optional discovery check */ }
   let sitemapUrl = new URL("/sitemap.xml", url.origin);
-  const sitemapDirective = robots?.text.split(/\\r?\\n/).map(line => line.trim()).find(line => /^sitemap\\s*:/i.test(line));
+  const sitemapDirective = robots?.text.split(/\r?\n/).map(line => line.trim()).find(line => /^sitemap\s*:/i.test(line));
   if (sitemapDirective) {
     try {
-      const candidate = new URL(sitemapDirective.replace(/^sitemap\\s*:\\s*/i, ""), url.origin);
+      const candidate = new URL(sitemapDirective.replace(/^sitemap\s*:\s*/i, ""), url.origin);
       // Do not fetch a cross-host sitemap URL from robots.txt.
       if (candidate.protocol === url.protocol && candidate.hostname.toLowerCase() === url.hostname.toLowerCase()) sitemapUrl = candidate;
     } catch { /* fall back to the standard sitemap path */ }
