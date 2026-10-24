@@ -9,16 +9,17 @@ export type AuditHtmlResult = {
 
 /**
  * Prefer Browser Run when available, but keep the audit usable with the safe
- * pinned-IP initial-HTML fetch when the remote renderer fails.
+ * pinned-IP initial-HTML fetch when the remote renderer fails or returns no HTML.
  */
 export async function fetchAuditHtmlWithFallback(
-  render: () => Promise<string>,
+  render: () => Promise<string | null>,
   fetchInitialHtml: () => Promise<InitialHtmlResult>,
 ): Promise<AuditHtmlResult> {
   let renderWarning: string | undefined;
   try {
     const html = await render();
-    return { html, status: 200, rendered: true };
+    if (html !== null) return { html, status: 200, rendered: true };
+    renderWarning = "Browser rendering returned no HTML; used initial HTML instead.";
   } catch (error) {
     renderWarning = error instanceof Error
       ? error.message
