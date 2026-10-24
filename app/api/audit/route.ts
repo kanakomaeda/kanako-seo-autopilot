@@ -124,7 +124,15 @@ export async function POST(request: Request) {
     if (rateLimitGate.response) return rateLimitGate.response;
 
     const { url, address } = await validatePublicUrl(raw);
-    const renderedHtml = await fetchBrowserRunHtml(url.toString());
+    let renderedHtml: string | null = null;
+    let renderWarning: string | undefined;
+    try {
+      renderedHtml = await fetchBrowserRunHtml(url.toString());
+    } catch (error) {
+      // Browser rendering is an enhancement, not a requirement for a safe audit.
+      // Fall back to the pinned-IP HTML fetch and clearly label the evidence.
+      renderWarning = error instanceof Error ? error.message : "Browser rendering failed; used initial HTML instead.";
+    }
     let html: string;
     let status = 200;
     if (renderedHtml !== null) {
@@ -138,6 +146,7 @@ export async function POST(request: Request) {
     const result = analyzeHtml(html, rendered);
     return NextResponse.json({
       ...result, url: raw, finalUrl: url.toString(), status, renderMode: rendered ? "rendered" : "initial-html",
+      ...(renderWarning ? { renderWarning } : {}),
       fetchedAt: new Date().toISOString(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
