@@ -15,17 +15,17 @@ function resolverAddress(address: PublicAddress): string {
 
 function getResourceUrls(html: string, baseUrl: URL): URL[] {
   const urls: URL[] = [];
-  const tagPattern = /<(script|link|img|source|video|audio)\\b[^>]*>/gi;
+  const tagPattern = /<(script|link|img|source|video|audio)\b[^>]*>/gi;
   let match: RegExpExecArray | null;
   while ((match = tagPattern.exec(html))) {
     const tag = match[0];
     const tagName = match[1].toLowerCase();
-    const rel = tag.match(/\\brel\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))/i);
+    const rel = tag.match(/\brel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>]+))/i);
     const isResourceLink = tagName !== "link" ||
-      /(?:^|\\s)(?:stylesheet|preload|modulepreload)(?:\\s|$)/i.test(rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? "");
+      /(?:^|\s)(?:stylesheet|preload|modulepreload)(?:\s|$)/i.test(rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? "");
     if (!isResourceLink) continue;
     const attrName = tagName === "link" ? "href" : "src";
-    const attr = new RegExp(`\\\\b${attrName}\\\\s*=\\\\s*(?:"([^"]*)"|'([^']*)'|([^\\\\s"'=<>]+))`, "i").exec(tag);
+    const attr = new RegExp(`\\b${attrName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, "i").exec(tag);
     const raw = (attr?.[1] ?? attr?.[2] ?? attr?.[3] ?? "").replace(/&amp;/gi, "&").trim();
     if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) continue;
     try {
@@ -42,7 +42,7 @@ function getResourceUrls(html: string, baseUrl: URL): URL[] {
 }
 
 async function resolveResourceHost(hostname: string): Promise<PublicAddress | null> {
-  const normalized = hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (!normalized || isIP(normalized) !== 0 ||
       normalized === "localhost" || normalized.endsWith(".localhost") ||
       normalized.endsWith(".local") || normalized.endsWith(".internal")) return null;
@@ -65,7 +65,7 @@ export async function renderPublicPage(
 ): Promise<{ html: string; finalUrl: string } | null> {
   // Chromium's host resolver mapping is deliberately limited to DNS hostnames.
   // Literal-IP targets remain supported by the initial-HTML audit only.
-  if (/^[\\[\\]]/.test(target.hostname) || /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
+  if (/^[\[\]]/.test(target.hostname) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
     return null;
   }
 
@@ -146,7 +146,7 @@ export async function renderPublicPage(
       let previousTextLength = -1;
       let stableSamples = 0;
       for (let step = 0; step < 14; step += 1) {
-        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
+        const textLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
         if (textLength >= 35 && textLength === previousTextLength) stableSamples += 1;
         else stableSamples = 0;
         previousTextLength = textLength;
