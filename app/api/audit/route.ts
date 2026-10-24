@@ -172,34 +172,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
+    // Fail closed on missing trusted infrastructure metadata before doing auth,
+    // DNS, or target-site work. Do not trust client-controlled x-forwarded-for.
+    const clientIp = request.headers.get("x-real-ip")?.trim();
+    if (!clientIp) {
+      return NextResponse.json(
+        { error: "The audit service is temporarily unavailable. Please try again shortly." },
+        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+      );
+    }
+    const rateLimitGate = await enforceAuditRateLimit(clientIp);
+    if (rateLimitGate.response) return rateLimitGate.response;
+
     const token = bearerToken(request);
     if (!token) return NextResponse.json({ error: "Mag-sign up o mag-login muna para magamit ang SEO audit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
     const user = await getAuthenticatedUser(token);
     if (!user) return NextResponse.json({ error: "Nag-expire ang session. Mag-login ulit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
-    let entitlement: { allowed?: boolean; reason?: string; plan?: string; next_free_at?: string; expires_at?: string; unlimited?: boolean };
-    try { entitlement = await callSupabaseRpc("seo_claim_free_audit", token); }
-    catch { return NextResponse.json({ error: "Hindi ma-verify ang subscription. Walang audit na ginawa; subukan ulit mamaya." }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
-    if (!entitlement.allowed) return NextResponse.json({ error: "Naubos na ang free audit attempt mo. Mag-submit ng manual payment request para ma-activate ang subscription.", subscriptionRequired: true, nextFreeAt: entitlement.next_free_at ?? null }, { status: 402, headers: { "Cache-Control": "no-store" } });
-    // The database RPC grants unlimited entitlement only to the confirmed,
-    // designated owner account. Keep infrastructure abuse controls for regular
-    // users, while not applying the per-IP audit quota to the verified superuser.
-    const isSuperuser = entitlement.unlimited === true && entitlement.plan === "admin";
-    if (!isSuperuser) {
-      // Vercel supplies x-real-ip at the trusted edge. Do not derive the
-      // rate-limit identity from x-forwarded-for, which can be client-spoofed.
-      const clientIp = request.headers.get("x-real-ip")?.trim();
-      if (!clientIp) {
-        return NextResponse.json(
-          { error: "The audit service is temporarily unavailable. Please try again shortly." },
-          { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
-        );
-      }
-
-      const rateLimitGate = await enforceAuditRateLimit(clientIp);
-      if (rateLimitGate.response) return rateLimitGate.response;
-    }
-
+    // Validate the submitted URL before consuming an audit attempt. A malformed
+    // URL, unavailable subscription service, or a failed fetch must not burn the
+    // user's weekly free allowance.
     const { url, address } = await validatePublicUrl(raw);
+
     const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
     const [rendered, discoveryFindings] = await Promise.all([
       renderPublicPage(url, address, initialHtml),
@@ -215,6 +208,14 @@ export async function POST(request: Request) {
     const score = baseResult.score === null
       ? null
       : scoreFindings(findings.filter(f => f.severity !== "info"));
+    // Atomically consume the free attempt only after a complete audit result
+    // exists. Invalid URLs and target-site/network/rendering failures do not use
+    // an attempt. The RPC remains the authoritative concurrent-use gate.
+    let entitlement: { allowed?: boolean; reason?: string; plan?: string; next_free_at?: string; expires_at?: string; unlimited?: boolean };
+    try { entitlement = await callSupabaseRpc("seo_claim_free_audit", token); }
+    catch { return NextResponse.json({ error: "Hindi ma-verify ang subscription. Walang attempt na naitala; subukan ulit mamaya." }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
+    if (!entitlement.allowed) return NextResponse.json({ error: "Naubos na ang free audit attempt mo. Mag-submit ng manual payment request para ma-activate ang subscription.", subscriptionRequired: true, nextFreeAt: entitlement.next_free_at ?? null }, { status: 402, headers: { "Cache-Control": "no-store" } });
+
     return NextResponse.json({
       ...baseResult, findings, score, url: raw, finalUrl: auditUrl, status: response.statusCode ?? 200,
       evidenceMode: rendered ? "rendered" : "initial-html",

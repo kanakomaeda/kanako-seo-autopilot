@@ -141,12 +141,14 @@ export async function renderPublicPage(
     // meaningful amount of text has appeared and then remained stable. Scroll
     // in bounded steps to trigger common lazy-loaded sections without relying
     // on networkidle, which can hang on analytics or long-polling requests.
-    await page.evaluate(async () => {
-      const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    // Pass the browser-side function as source text so the TypeScript test
+    // runner cannot inject its Node-only __name helper into the page context.
+    await page.evaluate(`async () => {
+      const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
       let previousTextLength = -1;
       let stableSamples = 0;
       for (let step = 0; step < 14; step += 1) {
-        const textLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
         if (textLength >= 35 && textLength === previousTextLength) stableSamples += 1;
         else stableSamples = 0;
         previousTextLength = textLength;
@@ -159,7 +161,7 @@ export async function renderPublicPage(
       }
       window.scrollTo(0, 0);
       await pause(300);
-    });
+    }`);
 
     const html = await page.content();
     if (!html || Buffer.byteLength(html, "utf8") > MAX_RENDERED_HTML) return null;
