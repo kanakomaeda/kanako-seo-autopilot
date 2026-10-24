@@ -122,7 +122,7 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
   if (Buffer.byteLength(html, "utf8") > MAX_RENDERED_HTML_BYTES) {
     throw new Error("The rendered page is too large to audit (maximum 1 MB).");
   }
-  if (!/<(?:!doctype\\s+html|html|head|body)\\b/i.test(html)) {
+  if (!/<(?:!doctype\s+html|html|head|body)\b/i.test(html)) {
     throw new Error("Browser Run did not return a valid HTML document.");
   }
   return html;
