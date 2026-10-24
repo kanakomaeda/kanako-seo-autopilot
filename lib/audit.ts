@@ -1,7 +1,7 @@
 export type Severity = "critical" | "warning" | "info";
 export type Finding = { id: string; title: string; severity: Severity; detail: string; recommendation: string };
 export type AuditInput = { title: string; description: string; h1Count: number; wordCount: number; canonical: boolean; robotsNoindex: boolean; viewport: boolean; lang: boolean; imageCount: number; imagesWithoutAlt: number; scriptCount: number; structuredData: boolean; canonicalUrl: string; metaRobots: string; headingsWithoutText: number; linksCount: number; linksWithoutHref: number };
-export type AuditResult = AuditInput & { score: number; coverage: number; limitedEvidence: boolean; findings: Finding[]; scoreLabel: "Initial HTML checks score" };
+export type AuditResult = AuditInput & { score: number | null; coverage: number; limitedEvidence: boolean; findings: Finding[]; scoreLabel: "Initial HTML checks score" };
 
 export function scoreFindings(findings: Finding[]): number {
   const penalty: Record<Severity, number> = { critical: 12, warning: 4, info: 0 };
@@ -71,7 +71,7 @@ export function analyzeHtml(html: string): AuditResult {
     title, description, h1Count, wordCount: words.length, canonical: Boolean(canonicalLink), canonicalUrl,
     robotsNoindex, metaRobots: robots, viewport, lang, imageCount: images.length, imagesWithoutAlt,
     scriptCount: scripts.length, structuredData, headingsWithoutText, linksCount: anchors.length,
-    linksWithoutHref: anchors.filter(a => !a.href?.trim()).length, score: scoreFindings(measured), coverage,
+    linksWithoutHref: anchors.filter(a => !a.href?.trim()).length, score: limitedEvidence ? null : scoreFindings(measured), coverage,
     limitedEvidence, findings, scoreLabel: "Initial HTML checks score",
   };
 }

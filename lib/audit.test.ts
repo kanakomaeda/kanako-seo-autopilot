@@ -19,7 +19,7 @@ test("JavaScript-heavy shell lowers evidence coverage and marks missing signals 
   assert.ok(result.findings.some(f => f.id === "js-shell" && f.severity === "info"));
   assert.ok(result.findings.some(f => f.id === "h1-missing" && f.severity === "info"));
   assert.ok(result.findings.some(f => f.id === "content-sparse" && f.severity === "info"));
-  assert.equal(result.score, 100, "provisional informational findings must not imply confirmed SEO failures");
+  assert.equal(result.score, null);
 });
 test("missing structured data alone is informational", () => {
   const result = analyzeHtml('<html lang="en"><head><title>A clear descriptive page title</title><meta name="viewport" content="width=device-width"><meta name="description" content="A useful description for this example page."></head><body><h1>Hello</h1><p>' + "Useful content ".repeat(30) + '</p></body></html>');
