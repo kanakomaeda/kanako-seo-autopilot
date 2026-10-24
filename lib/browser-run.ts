@@ -78,23 +78,51 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
     throw new Error(`Browser Run could not render this page (HTTP ${response.status}).`);
   }
 
-  const html = await response.text();
+  const responseText = await response.text();
+  let html = responseText;
+  try {
+    const data = JSON.parse(responseText) as {
+      success?: boolean;
+      errors?: unknown[];
+      result?: unknown;
+      meta?: { finalUrl?: unknown; redirectChain?: Array<{ url?: unknown }> };
+    };
+    if ("success" in data || "result" in data || "errors" in data) {
+      if (data.success !== true || typeof data.result !== "string") {
+        throw new Error("Browser Run returned an unsuccessful rendering response.");
+      }
+      const allowedFinalUrl = new URL(rawUrl);
+      if (typeof data.meta?.finalUrl === "string") {
+        const finalUrl = new URL(data.meta.finalUrl);
+        if (finalUrl.hostname.toLowerCase() !== allowedFinalUrl.hostname.toLowerCase() ||
+            (finalUrl.protocol !== "http:" && finalUrl.protocol !== "https:")) {
+          throw new Error("Browser Run redirected outside the requested hostname.");
+        }
+      }
+      for (const redirect of data.meta?.redirectChain ?? []) {
+        if (typeof redirect.url !== "string" ||
+            new URL(redirect.url).hostname.toLowerCase() !== allowedFinalUrl.hostname.toLowerCase()) {
+          throw new Error("Browser Run redirected outside the requested hostname.");
+        }
+      }
+      html = data.result;
+    }
+  } catch (error) {
+    if (error instanceof Error &&
+        (error.message.includes("unsuccessful rendering") || error.message.includes("redirected outside"))) {
+      throw error;
+    }
+    // Some deployments return HTML directly rather than the JSON response envelope.
+    if (!responseText.trimStart().startsWith("<")) {
+      throw new Error("Browser Run returned an invalid rendering response.");
+    }
+    html = responseText;
+  }
   if (!html.trim()) throw new Error("Browser Run returned an empty page.");
   if (Buffer.byteLength(html, "utf8") > MAX_RENDERED_HTML_BYTES) {
     throw new Error("The rendered page is too large to audit (maximum 1 MB).");
   }
-  if (html.trimStart().startsWith("{")) {
-    try {
-      const data = JSON.parse(html) as { success?: boolean; errors?: unknown[] };
-      if (data.success === false || data.errors?.length) {
-        throw new Error("Browser Run returned an unsuccessful rendering response.");
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("unsuccessful rendering")) throw error;
-      // A valid HTML page may start with a JSON-like text node; continue to normal HTML validation.
-    }
-  }
-  if (!/<(?:!doctype\s+html|html|head|body)\b/i.test(html)) {
+  if (!/<(?:!doctype\\s+html|html|head|body)\\b/i.test(html)) {
     throw new Error("Browser Run did not return a valid HTML document.");
   }
   return html;
