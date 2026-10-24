@@ -65,7 +65,10 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
       },
       body: JSON.stringify({
         url: url.toString(),
-        gotoOptions: { waitUntil: "networkidle2", timeout: 20_000 },
+        // Avoid failing navigation solely because analytics or other requests keep
+        // the network busy; give client-side rendering a short settle period instead.
+        gotoOptions: { waitUntil: "domcontentloaded", timeout: 15_000 },
+        waitForTimeout: 2_000,
         rejectResourceTypes: ["image", "media", "font"],
         allowRequestPattern: allowedPatterns,
       }),
