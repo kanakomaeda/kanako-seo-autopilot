@@ -34,3 +34,20 @@ test("detects noindex and missing image alt without claiming rendered-page cover
   assert.ok(result.findings.some(f => f.id === "noindex" && f.severity === "critical"));
   assert.ok(result.findings.some(f => f.id === "image-alt" && f.severity === "warning"));
 });
+test("reads meta attributes regardless of order and decodes title entities", () => {
+  const result = analyzeHtml('<html lang="en"><head><title>Research &amp; SEO: a useful page title</title><meta content="A useful summary for this page." name="description"><meta content="width=device-width" name="viewport"><link href="https://example.com/preferred" hreflang="en" rel="alternate"><link href="https://example.com/page" rel="canonical"></head><body><h1>Useful heading</h1><a title="No destination"></a><img src="/decorative.svg" alt=""><p>' + "Useful content ".repeat(30) + '</p></body></html>');
+  assert.equal(result.title, "Research & SEO: a useful page title");
+  assert.equal(result.description, "A useful summary for this page.");
+  assert.equal(result.canonical, true);
+  assert.equal(result.canonicalUrl, "https://example.com/page");
+  assert.equal(result.linksCount, 1);
+  assert.equal(result.linksWithoutHref, 1);
+  assert.equal(result.imagesWithoutAlt, 0, "an explicit empty alt attribute is valid for decorative images");
+});
+test("detects googlebot noindex directive and empty H1 headings", () => {
+  const result = analyzeHtml('<html lang="en"><head><title>A sufficiently descriptive title for testing</title><meta name="viewport" content="width=device-width"><meta name="description" content="A sufficiently useful description for a test page."><meta content="noindex,follow" name="googlebot"></head><body><h1> </h1><p>' + "Useful content ".repeat(30) + '</p></body></html>');
+  assert.equal(result.robotsNoindex, true);
+  assert.equal(result.metaRobots, "noindex,follow");
+  assert.equal(result.headingsWithoutText, 1);
+  assert.ok(result.findings.some(f => f.id === "heading-empty"));
+});
