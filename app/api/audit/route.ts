@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
+import { isBlockedHostname, parsePublicHttpUrl } from "@/lib/url-security";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
 export const runtime = "nodejs";
@@ -22,8 +23,7 @@ async function resolvePublicAddress(hostname: string): Promise<{ address: string
     if (isPrivateIPv6(normalized)) throw new Error("Private or reserved IP addresses are not allowed.");
     return { address: normalized, family: 6 };
   }
-  if (!normalized || normalized === "localhost" || normalized.endsWith(".localhost") ||
-      normalized.endsWith(".local") || normalized.endsWith(".internal")) {
+  if (isBlockedHostname(normalized)) {
     throw new Error("Only publicly accessible websites are supported.");
   }
   let addresses;
@@ -37,11 +37,7 @@ async function resolvePublicAddress(hostname: string): Promise<{ address: string
   return { address: chosen.address, family: chosen.family };
 }
 async function validatePublicUrl(raw: string): Promise<{ url: URL; address: { address: string; family: 4 | 6 } }> {
-  let url: URL;
-  try { url = new URL(raw); } catch { throw new Error("Enter a valid full URL, such as https://example.com."); }
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only HTTP and HTTPS URLs are supported.");
-  if (url.username || url.password) throw new Error("URLs containing usernames or passwords are not allowed.");
-  if (!url.hostname) throw new Error("Enter a valid public website hostname.");
+  const url = parsePublicHttpUrl(raw);
   const address = await resolvePublicAddress(url.hostname);
   url.hash = "";
   return { url, address };
