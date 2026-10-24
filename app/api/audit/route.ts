@@ -134,9 +134,10 @@ export async function POST(request: Request) {
       html = fetched.html;
       status = fetched.response.statusCode ?? 200;
     }
-    const result = analyzeHtml(html);
+    const rendered = renderedHtml !== null;
+    const result = analyzeHtml(html, rendered);
     return NextResponse.json({
-      ...result, url: raw, finalUrl: url.toString(), status,
+      ...result, url: raw, finalUrl: url.toString(), status, renderMode: rendered ? "rendered" : "initial-html",
       fetchedAt: new Date().toISOString(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
