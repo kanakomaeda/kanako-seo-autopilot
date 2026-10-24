@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml, scoreFindings } from "@/lib/audit";
 import { analyzeAdvancedHtml } from "@/lib/advanced-audit";
+import { analyzeDiscovery } from "@/lib/discovery-audit";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 
@@ -106,6 +107,62 @@ function fetchPinnedHtml(url: URL, address: { address: string; family: 4 | 6 }):
     req.end();
   });
 }
+function fetchPinnedText(url: URL, address: { address: string; family: 4 | 6 }): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+    const req = requestFn(url, {
+      method: "GET",
+      headers: { "User-Agent": "KanakoSEOAutoPilot/1.2 (+robots-sitemap-check)", "Accept": "text/plain,application/xml,text/xml,*/*;q=0.1", "Connection": "close" },
+      lookup: ((_hostname: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
+        if (options?.all) callback(null, [{ address: address.address, family: address.family }]);
+        else callback(null, address.address, address.family);
+      }) as never,
+      servername: isIP(url.hostname.replace(/^\\[|\\]$/g, "")) ? undefined : url.hostname,
+      timeout: 1800,
+    }, response => {
+      const chunks: Buffer[] = [];
+      let total = 0;
+      response.on("data", (chunk: Buffer | string) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        const remaining = 200_000 - total;
+        if (remaining <= 0) { response.destroy(); return; }
+        const part = buffer.subarray(0, remaining);
+        chunks.push(part);
+        total += part.length;
+        if (part.length < buffer.length || total >= 200_000) response.destroy();
+      });
+      response.on("end", () => resolve({ status: response.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+      response.on("error", error => {
+        if (total >= 200_000) resolve({ status: response.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") });
+        else reject(error);
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("Discovery request timed out.")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+async function inspectRobotsAndSitemap(url: URL, address: { address: string; family: 4 | 6 }) {
+  let robots: { status: number; text: string } | null = null;
+  try { robots = await fetchPinnedText(new URL("/robots.txt", url.origin), address); } catch { /* optional discovery check */ }
+  let sitemapUrl = new URL("/sitemap.xml", url.origin);
+  const sitemapDirective = robots?.text.split(/\\r?\\n/).map(line => line.trim()).find(line => /^sitemap\\s*:/i.test(line));
+  if (sitemapDirective) {
+    try {
+      const candidate = new URL(sitemapDirective.replace(/^sitemap\\s*:\\s*/i, ""), url.origin);
+      // Do not fetch a cross-host sitemap URL from robots.txt.
+      if (candidate.protocol === url.protocol && candidate.hostname.toLowerCase() === url.hostname.toLowerCase()) sitemapUrl = candidate;
+    } catch { /* fall back to the standard sitemap path */ }
+  }
+  let sitemap: { status: number; text: string } | null = null;
+  try { sitemap = await fetchPinnedText(sitemapUrl, address); } catch { /* optional discovery check */ }
+  return analyzeDiscovery({
+    robotsStatus: robots?.status ?? null,
+    robotsText: robots?.text ?? "",
+    sitemapStatus: sitemap?.status ?? null,
+    sitemapText: sitemap?.text ?? "",
+  });
+}
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -131,7 +188,8 @@ export async function POST(request: Request) {
     const { response, html } = await fetchPinnedHtml(url, address);
     const baseResult = analyzeHtml(html);
     const advancedFindings = analyzeAdvancedHtml(html, url.toString());
-    const findings = [...baseResult.findings, ...advancedFindings];
+    const discoveryFindings = await inspectRobotsAndSitemap(url, address);
+    const findings = [...baseResult.findings, ...advancedFindings, ...discoveryFindings];
     const score = baseResult.score === null
       ? null
       : scoreFindings(findings.filter(f => f.severity !== "info"));
