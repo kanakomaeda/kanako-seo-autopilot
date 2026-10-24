@@ -65,7 +65,7 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
   }) as typeof fetch;
   try {
     const html = await fetchBrowserRunHtml("https://trusted.example/page");
-    assert.match(requestedUrl, /browser-run\/content\?cacheTTL=0$/);
+    assert.match(requestedUrl, /browser-rendering\/content\?cacheTTL=0$/);
     const parsedBody = JSON.parse(requestBody) as { allowRequestPattern?: string[]; gotoOptions?: { waitUntil?: string; timeout?: number }; waitForTimeout?: number };
     assert.deepEqual(parsedBody.allowRequestPattern, ["/^https?:\\/\\/trusted\\.example(?::\\d+)?(?:\\/|$)/"]);
     assert.deepEqual(parsedBody.gotoOptions, { waitUntil: "domcontentloaded", timeout: 15_000 });
