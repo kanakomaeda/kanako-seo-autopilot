@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { isBlockedHostname, parsePublicHttpUrl } from "./url-security";
 
 const MAX_RENDERED_HTML_BYTES = 1_000_000;
-const BROWSER_RUN_TIMEOUT_MS = 18_000;
+const BROWSER_RUN_TIMEOUT_MS = 22_000;
 
 function parseAllowedHosts(raw: string | undefined): Set<string> {
   return new Set(
@@ -62,7 +62,7 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
       },
       body: JSON.stringify({
         url: url.toString(),
-        gotoOptions: { waitUntil: "domcontentloaded", timeout: 15_000 },
+        gotoOptions: { waitUntil: "domcontentloaded", timeout: 20_000 },
         rejectResourceTypes: ["image", "media", "font"],
         allowRequestPattern: allowedPatterns,
       }),
