@@ -71,7 +71,7 @@ export async function renderPublicPage(
       let previousTextLength = -1;
       let stableSamples = 0;
       for (let step = 0; step < 8; step += 1) {
-        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
+        const textLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
         if (textLength > 0 && textLength === previousTextLength) stableSamples += 1;
         else stableSamples = 0;
         previousTextLength = textLength;
