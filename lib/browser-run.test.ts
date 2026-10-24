@@ -68,7 +68,10 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
     assert.match(requestedUrl, /browser-run\/content\?cacheTTL=0$/);
     const parsedBody = JSON.parse(requestBody) as { allowRequestPattern?: string[] };
     assert.deepEqual(parsedBody.allowRequestPattern, ["/^https?:\\/\\/trusted\\.example(?::\\d+)?(?:\\/|$)/i"]);
-    const pattern = new RegExp(parsedBody.allowRequestPattern?.[0].replace(/^\\/(.*)\\/i$/, "$1") ?? "a^", "i");
+    const patternLiteral = parsedBody.allowRequestPattern?.[0];
+    assert.ok(patternLiteral);
+    assert.ok(patternLiteral.startsWith("/") && patternLiteral.endsWith("/i"));
+    const pattern = new RegExp(patternLiteral.slice(1, -2));
     assert.equal(pattern.test("https://trusted.example/page"), true);
     assert.equal(pattern.test("https://trusted.example.evil.test/page"), false);
     assert.match(html ?? "", /Rendered title/);
