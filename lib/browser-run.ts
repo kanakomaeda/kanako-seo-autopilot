@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { isBlockedHostname, parsePublicHttpUrl } from "./url-security";
 
 const MAX_RENDERED_HTML_BYTES = 1_000_000;
-const BROWSER_RUN_TIMEOUT_MS = 40_000;
+const BROWSER_RUN_TIMEOUT_MS = 18_000;
 
 function parseAllowedHosts(raw: string | undefined): Set<string> {
   return new Set(
@@ -65,10 +65,12 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
       },
       body: JSON.stringify({
         url: url.toString(),
-        // Avoid failing navigation solely because analytics or other requests keep
-        // the network busy; give client-side rendering a short settle period instead.
-        gotoOptions: { waitUntil: "domcontentloaded", timeout: 30_000 },
-        waitForTimeout: 2_000,
+        // Prefer networkidle2 for dynamic pages, but cap this request so the API
+        // route has time to fall back to the safe initial-HTML fetch.
+        gotoOptions: { waitUntil: "networkidle2", timeout: 15_000 },
+        waitForTimeout: 1_000,
+        actionTimeout: 10_000,
+        bestAttempt: true,
         rejectResourceTypes: ["image", "media", "font"],
         allowRequestPattern: allowedPatterns,
       }),
