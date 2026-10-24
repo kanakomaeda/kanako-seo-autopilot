@@ -63,9 +63,27 @@ export async function renderPublicPage(
     });
     const response = await page.goto(target.toString(), { waitUntil: "domcontentloaded", timeout: 6_000 });
     if (!response || response.status() < 200 || response.status() >= 400) return null;
-    // Allow short client-rendering work without waiting indefinitely for analytics
-    // or long-polling requests. A hard cap keeps the function budget bounded.
-    await page.waitForTimeout(1_000);
+    // Give client-side hydration time to populate the DOM, and scroll in a few
+    // bounded steps to trigger common lazy-loaded sections. Do not wait for
+    // networkidle: analytics and long-polling can keep it open indefinitely.
+    await page.evaluate(async () => {
+      const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      let previousTextLength = -1;
+      let stableSamples = 0;
+      for (let step = 0; step < 8; step += 1) {
+        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
+        if (textLength > 0 && textLength === previousTextLength) stableSamples += 1;
+        else stableSamples = 0;
+        previousTextLength = textLength;
+
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        window.scrollTo(0, Math.min(maxScroll, step * Math.max(400, Math.floor(window.innerHeight * 0.8))));
+        await pause(250);
+        if (step >= 2 && stableSamples >= 2) break;
+      }
+      window.scrollTo(0, 0);
+      await pause(300);
+    });
     const html = await page.content();
     if (!html || Buffer.byteLength(html, "utf8") > MAX_RENDERED_HTML) return null;
     const final = new URL(page.url());
