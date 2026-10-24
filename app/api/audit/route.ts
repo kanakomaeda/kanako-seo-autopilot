@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
 import { fetchBrowserRunHtml } from "@/lib/browser-run";
+import { fetchAuditHtmlWithFallback } from "@/lib/audit-html-fallback";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { isBlockedHostname, parsePublicHttpUrl } from "@/lib/url-security";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
@@ -124,25 +125,14 @@ export async function POST(request: Request) {
     if (rateLimitGate.response) return rateLimitGate.response;
 
     const { url, address } = await validatePublicUrl(raw);
-    let renderedHtml: string | null = null;
-    let renderWarning: string | undefined;
-    try {
-      renderedHtml = await fetchBrowserRunHtml(url.toString());
-    } catch (error) {
-      // Browser rendering is an enhancement, not a requirement for a safe audit.
-      // Fall back to the pinned-IP HTML fetch and clearly label the evidence.
-      renderWarning = error instanceof Error ? error.message : "Browser rendering failed; used initial HTML instead.";
-    }
-    let html: string;
-    let status = 200;
-    if (renderedHtml !== null) {
-      html = renderedHtml;
-    } else {
-      const fetched = await fetchPinnedHtml(url, address);
-      html = fetched.html;
-      status = fetched.response.statusCode ?? 200;
-    }
-    const rendered = renderedHtml !== null;
+    const auditHtml = await fetchAuditHtmlWithFallback(
+      () => fetchBrowserRunHtml(url.toString()),
+      async () => {
+        const fetched = await fetchPinnedHtml(url, address);
+        return { html: fetched.html, status: fetched.response.statusCode ?? 200 };
+      },
+    );
+    const { html, status, rendered, renderWarning } = auditHtml;
     const result = analyzeHtml(html, rendered);
     return NextResponse.json({
       ...result, url: raw, finalUrl: url.toString(), status, renderMode: rendered ? "rendered" : "initial-html",
