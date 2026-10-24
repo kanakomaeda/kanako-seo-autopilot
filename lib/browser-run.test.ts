@@ -66,10 +66,13 @@ test("Browser Run parses rendered HTML from the Cloudflare response envelope", a
   try {
     const html = await fetchBrowserRunHtml("https://trusted.example/page");
     assert.match(requestedUrl, /browser-rendering\/content\?cacheTTL=0$/);
-    const parsedBody = JSON.parse(requestBody) as { allowRequestPattern?: string[]; gotoOptions?: { waitUntil?: string; timeout?: number }; waitForTimeout?: number };
+    const parsedBody = JSON.parse(requestBody) as { allowRequestPattern?: string[]; gotoOptions?: { waitUntil?: string; timeout?: number }; waitForTimeout?: number; actionTimeout?: number; bestAttempt?: boolean; rejectResourceTypes?: string[] };
     assert.deepEqual(parsedBody.allowRequestPattern, ["/^https?:\\/\\/trusted\\.example(?::\\d+)?(?:\\/|$)/"]);
-    assert.deepEqual(parsedBody.gotoOptions, { waitUntil: "domcontentloaded", timeout: 15_000 });
-    assert.equal(parsedBody.waitForTimeout, 2_000);
+    assert.deepEqual(parsedBody.gotoOptions, { waitUntil: "networkidle2", timeout: 15_000 });
+    assert.equal(parsedBody.waitForTimeout, 1_000);
+    assert.equal(parsedBody.actionTimeout, 10_000);
+    assert.equal(parsedBody.bestAttempt, true);
+    assert.deepEqual(parsedBody.rejectResourceTypes, ["image", "media", "font"]);
     const patternLiteral = parsedBody.allowRequestPattern?.[0];
     assert.ok(patternLiteral);
     assert.ok(patternLiteral.startsWith("/") && patternLiteral.endsWith("/"));
