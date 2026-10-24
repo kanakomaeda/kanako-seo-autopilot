@@ -1,4 +1,4 @@
-import type { Finding } from "@/lib/audit";
+import type { Finding } from "./audit";
 
 function readAttributes(tag: string): Record<string, string> {
   const result: Record<string, string> = {};
