@@ -45,7 +45,10 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
   const allowedHosts = parseAllowedHosts(process.env.CLOUDFLARE_BROWSER_RUN_ALLOWED_HOSTS);
   if (!allowedHosts.has(url.hostname.toLowerCase().replace(/\.$/, ""))) return null;
 
-  const allowedPatterns = [...allowedHosts].map(
+  // Restrict this browser session to the exact hostname being audited, even if
+  // the operator has trusted additional hosts for separate audits.
+  const targetHost = url.hostname.toLowerCase().replace(/\.$/, "");
+  const allowedPatterns = [targetHost].map(
     // Cloudflare expects a regex literal string, with one backslash escaping each slash.
     (host) => `/^https?:${String.fromCharCode(92)}/${String.fromCharCode(92)}/${escapeRegex(host)}(?::${String.fromCharCode(92)}d+)?(?:${String.fromCharCode(92)}/|$)/`,
   );
