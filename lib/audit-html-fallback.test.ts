@@ -45,3 +45,14 @@ test("propagates initial-HTML fetch failure instead of pretending an audit succe
     /The website returned HTTP 403\./,
   );
 });
+
+test("falls back when Browser Run returns null without throwing", async () => {
+  const result = await fetchAuditHtmlWithFallback(
+    async () => null,
+    async () => ({ html: "<html>Initial HTML</html>", status: 200 }),
+  );
+
+  assert.equal(result.html, "<html>Initial HTML</html>");
+  assert.equal(result.rendered, false);
+  assert.match(result.renderWarning ?? "", /returned no HTML/);
+});
