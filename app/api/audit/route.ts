@@ -5,6 +5,7 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { NextResponse } from "next/server";
 import { analyzeHtml } from "@/lib/audit";
+import { fetchBrowserRunHtml } from "@/lib/browser-run";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { isBlockedHostname, parsePublicHttpUrl } from "@/lib/url-security";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
@@ -123,10 +124,19 @@ export async function POST(request: Request) {
     if (rateLimitGate.response) return rateLimitGate.response;
 
     const { url, address } = await validatePublicUrl(raw);
-    const { response, html } = await fetchPinnedHtml(url, address);
+    const renderedHtml = await fetchBrowserRunHtml(url.toString());
+    let html: string;
+    let status = 200;
+    if (renderedHtml !== null) {
+      html = renderedHtml;
+    } else {
+      const fetched = await fetchPinnedHtml(url, address);
+      html = fetched.html;
+      status = fetched.response.statusCode ?? 200;
+    }
     const result = analyzeHtml(html);
     return NextResponse.json({
-      ...result, url: raw, finalUrl: url.toString(), status: response.statusCode ?? 200,
+      ...result, url: raw, finalUrl: url.toString(), status,
       fetchedAt: new Date().toISOString(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
