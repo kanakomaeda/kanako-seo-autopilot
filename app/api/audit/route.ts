@@ -128,10 +128,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
-    const forwarded = request.headers.get("x-forwarded-for");
-    const clientIp = request.headers.get("x-real-ip")?.trim() ||
-      (forwarded ? forwarded.split(",").at(-1)?.trim() : undefined) ||
-      "unknown";
+    // Vercel supplies x-real-ip at the trusted edge. Do not derive the
+    // rate-limit identity from x-forwarded-for, which can be client-spoofed.
+    const clientIp = request.headers.get("x-real-ip")?.trim() || "unknown";
 
     const rateLimitGate = await enforceAuditRateLimit(clientIp);
     if (rateLimitGate.response) return rateLimitGate.response;
