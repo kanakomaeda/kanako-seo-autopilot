@@ -188,7 +188,7 @@ export async function POST(request: Request) {
     const { url, address } = await validatePublicUrl(raw);
     const { response, html: initialHtml } = await fetchPinnedHtml(url, address);
     const [rendered, discoveryFindings] = await Promise.all([
-      renderPublicPage(url, address),
+      renderPublicPage(url, address, initialHtml),
       inspectRobotsAndSitemap(url, address),
     ]);
     // Prefer the browser DOM when it rendered successfully. If it did not, retain
