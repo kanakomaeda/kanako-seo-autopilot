@@ -49,7 +49,7 @@ export async function fetchBrowserRunHtml(rawUrl: string): Promise<string | null
     // Cloudflare expects a regex literal string, with one backslash escaping each slash.
     (host) => `/^https?:\/\/${escapeRegex(host)}(?::\\d+)?(?:\/|$)/`,
   );
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/browser-rendering/content?cacheTTL=0`;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/browser-run/content?cacheTTL=0`;
 
   let response: Response;
   try {
