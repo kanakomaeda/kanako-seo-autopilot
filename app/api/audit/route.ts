@@ -130,7 +130,14 @@ export async function POST(request: Request) {
     const raw = body.url.trim();
     // Vercel supplies x-real-ip at the trusted edge. Do not derive the
     // rate-limit identity from x-forwarded-for, which can be client-spoofed.
-    const clientIp = request.headers.get("x-real-ip")?.trim() || "unknown";
+    const clientIp = request.headers.get("x-real-ip")?.trim();
+    if (!clientIp) {
+      // Do not put unrelated visitors into a shared "unknown" rate-limit bucket.
+      return NextResponse.json(
+        { error: "The audit service is temporarily unavailable. Please try again shortly." },
+        { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "5" } },
+      );
+    }
 
     const rateLimitGate = await enforceAuditRateLimit(clientIp);
     if (rateLimitGate.response) return rateLimitGate.response;
