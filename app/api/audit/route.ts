@@ -10,6 +10,7 @@ import { analyzeDiscovery } from "@/lib/discovery-audit";
 import { isPrivateIPv4, isPrivateIPv6 } from "@/lib/ip-validation";
 import { enforceAuditRateLimit } from "@/lib/rate-limit-response";
 import { renderPublicPage } from "@/lib/rendered-browser";
+import { bearerToken, callSupabaseRpc, getAuthenticatedUser } from "@/lib/subscription-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -171,6 +172,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a URL under 2,048 characters." }, { status: 400 });
     }
     const raw = body.url.trim();
+    const token = bearerToken(request);
+    if (!token) return NextResponse.json({ error: "Mag-sign up o mag-login muna para magamit ang SEO audit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+    const user = await getAuthenticatedUser(token);
+    if (!user) return NextResponse.json({ error: "Nag-expire ang session. Mag-login ulit." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+    let entitlement: { allowed?: boolean; reason?: string; plan?: string; next_free_at?: string; expires_at?: string; unlimited?: boolean };
+    try { entitlement = await callSupabaseRpc("seo_claim_free_audit", token); }
+    catch { return NextResponse.json({ error: "Hindi ma-verify ang subscription. Walang audit na ginawa; subukan ulit mamaya." }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
+    if (!entitlement.allowed) return NextResponse.json({ error: "Naubos na ang free audit attempt mo. Mag-submit ng manual payment request para ma-activate ang subscription.", subscriptionRequired: true, nextFreeAt: entitlement.next_free_at ?? null }, { status: 402, headers: { "Cache-Control": "no-store" } });
     // Vercel supplies x-real-ip at the trusted edge. Do not derive the
     // rate-limit identity from x-forwarded-for, which can be client-spoofed.
     const clientIp = request.headers.get("x-real-ip")?.trim();
