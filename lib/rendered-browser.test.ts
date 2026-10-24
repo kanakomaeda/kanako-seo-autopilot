@@ -33,7 +33,7 @@ test("waits for delayed JavaScript content while keeping requests on the target 
   const address = server.address();
   assert.ok(address && typeof address !== "string");
   try {
-    const target = new URL(`http://example.com:${address.port}/`);
+    const target = new URL(`http://fixture.localhost:${address.port}/`);
     const rendered = await renderPublicPage(target, { address: "127.0.0.1", family: 4 });
     assert.ok(rendered, "expected headless Chromium to render the local fixture");
     assert.match(rendered.html, /Rendered heading/);
