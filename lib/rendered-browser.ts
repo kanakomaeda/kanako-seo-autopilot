@@ -11,7 +11,7 @@ export async function renderPublicPage(
 ): Promise<{ html: string; finalUrl: string } | null> {
   // Chromium's host resolver mapping is deliberately limited to DNS hostnames.
   // Literal-IP targets remain supported by the initial-HTML audit only.
-  if (/^[\\[\\]]/.test(target.hostname) || /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
+  if (/^[\[\]]/.test(target.hostname) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(target.hostname) || target.hostname.includes(":")) {
     return null;
   }
 
@@ -69,7 +69,7 @@ export async function renderPublicPage(
       let previousTextLength = -1;
       let stableSamples = 0;
       for (let step = 0; step < 14; step += 1) {
-        const textLength = (document.body?.innerText ?? "").replace(/\\s+/g, " ").trim().length;
+        const textLength = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length;
         if (textLength >= 35 && textLength === previousTextLength) stableSamples += 1;
         else stableSamples = 0;
         previousTextLength = textLength;
