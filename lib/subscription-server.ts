@@ -11,5 +11,5 @@ export async function callSupabaseRpc<T>(name:string,token:string,args:Record<st
  const response=await fetch(url+"/rest/v1/rpc/"+name,{method:"POST",headers:{apikey:key,Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify(args),cache:"no-store"});
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(payload&&typeof payload.message==="string"?payload.message:"Subscription request failed.");return payload as T;
 }
-export function bearerToken(request:Request):string|null{const match=(request.headers.get("authorization")??"").match(/^Bearer\\s+(.+)$/i);return match?.[1]??null;}
+export function bearerToken(request:Request):string|null{const match=(request.headers.get("authorization")??"").match(/^Bearer\s+(.+)$/i);return match?.[1]??null;}
 export function serviceUnavailable(){return NextResponse.json({error:"Subscription service is temporarily unavailable."},{status:503,headers:{"Cache-Control":"no-store"}});}
